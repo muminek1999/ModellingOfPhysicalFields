@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def generate_mesh(n_elements_x: int, n_elements_y: int, mats_ord: list[int], mat_bounds: list[float],
+def generate_mesh(n_elements_x: int, n_elements_y: int, mat_ord: list[int], mat_bounds: list[float],
                   shape: str = 'triangle', L: float = 1.0, H: float = 1.0):
     nx_nodes = n_elements_x + 1
     ny_nodes = n_elements_y + 1
@@ -9,33 +9,65 @@ def generate_mesh(n_elements_x: int, n_elements_y: int, mats_ord: list[int], mat
 
     x = np.linspace(0, L, nx_nodes)
     y = np.linspace(0, H, ny_nodes)
+
+    if n_elements_x < len(mat_bounds) + 2:
+        n_elements_x += 2
+        print(f"WARNING: number of elements on x-axis is too small. Number of elements is now {n_elements_x}")
+
+    for bound in mat_bounds:
+        idx = (np.abs(x - bound)).argmin()
+        if 0 < idx < n_elements_x:
+            x[idx] = bound
+        elif idx == 0:
+            x[idx + 1] = bound
+        else:
+            x[idx - 1] = bound
+
+    x = np.sort(x)
     xv, yv = np.meshgrid(x, y)
     nodes_coords = np.column_stack((xv.flatten(), yv.flatten()))
 
     elements = []
     global_node_ids = np.arange(n_nodes).reshape(ny_nodes, nx_nodes)
+    all_bounds = [0] + sorted(mat_bounds) + [L]
 
     if shape == 'triangle':
         for j in range(n_elements_y):
             for i in range(n_elements_x):
+                x_center = (x[i] - x[i + 1]) * 0.5
+                mat_idx = 0
+                for k in range(len(all_bounds)):
+                    if all_bounds[k] <= x_center <= all_bounds[k + 1]:
+                        mat_idx = k
+                        break
+                mat_id = mat_ord[mat_idx]
+
                 n1 = global_node_ids[j, i]          # Bottom-Left
                 n2 = global_node_ids[j, i + 1]      # Bottom-Right
                 n3 = global_node_ids[j + 1, i + 1]  # Top-Right
                 n4 = global_node_ids[j + 1, i]      # Top-Left
 
-                elements.append([n1, n2, n4, 0])
-                elements.append([n2, n3, n4, 0])
+                elements.append([n1, n2, n4, mat_id])
+                elements.append([n2, n3, n4, mat_id])
         return nodes_coords, np.array(elements), global_node_ids
 
     elif shape == 'rect':
         for j in range(n_elements_y):
             for i in range(n_elements_x):
+                x_center = (x[i] - x[i + 1]) * 0.5
+                mat_idx = 0
+                for k in range(len(all_bounds)):
+                    if all_bounds[k] <= x_center <= all_bounds[k + 1]:
+                        mat_idx = k
+                        break
+                mat_id = mat_ord[mat_idx]
+
                 n1 = global_node_ids[j, i]          # Bottom-Left
                 n2 = global_node_ids[j, i + 1]      # Bottom-Right
                 n3 = global_node_ids[j + 1, i + 1]  # Top-Right
                 n4 = global_node_ids[j + 1, i]      # Top-Left
 
-                elements.append([n1, n2, n3, n4, 0])
+                elements.append([n1, n2, n3, n4, mat_id])
         return nodes_coords, np.array(elements), global_node_ids
 
     else:
