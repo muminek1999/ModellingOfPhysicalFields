@@ -34,7 +34,7 @@ def generate_mesh(n_elements_x: int, n_elements_y: int, mat_ord: list[int], mat_
     if shape == 'triangle':
         for j in range(n_elements_y):
             for i in range(n_elements_x):
-                x_center = (x[i] - x[i + 1]) * 0.5
+                x_center = (x[i] + x[i + 1]) * 0.5
                 mat_idx = 0
                 for k in range(len(all_bounds)):
                     if all_bounds[k] <= x_center <= all_bounds[k + 1]:
@@ -54,7 +54,7 @@ def generate_mesh(n_elements_x: int, n_elements_y: int, mat_ord: list[int], mat_
     elif shape == 'rect':
         for j in range(n_elements_y):
             for i in range(n_elements_x):
-                x_center = (x[i] - x[i + 1]) * 0.5
+                x_center = (x[i] + x[i + 1]) * 0.5
                 mat_idx = 0
                 for k in range(len(all_bounds)):
                     if all_bounds[k] <= x_center <= all_bounds[k + 1]:
@@ -144,11 +144,68 @@ def global_assembly(nodes_coords: np.ndarray,
         k_matrix_local = element_stiffness(element, nodes_coords, k_val, shape)
 
         for i in range(len(global_indices)):
-            I = global_indices[i]       # global row index
+            I = int(global_indices[i])          # Global row index
             for j in range(len(global_indices)):
-                J = global_indices[j]   # global column index
+                J = int(global_indices[j])      # Global column index
 
                 k_matrix[I, J] += k_matrix_local[i, j]
+
+    return k_matrix, f_vector
+
+
+def apply_dirichlet(k_matrix: np.ndarray, f_vector: np.ndarray, node_list: np.ndarray, val: float):
+    penalty_num = 1.0e15
+
+    for node in node_list:
+        k_matrix[node, node] += penalty_num
+        f_vector[node] += penalty_num * val
+
+    return k_matrix, f_vector
+
+
+def apply_neumann(f_vector: np.ndarray, nodes_coords: np.ndarray, edges: np.ndarray, val: float):
+    for edge in edges:
+        node_i = edge[0]
+        node_j = edge[1]
+
+        x1, y1 = nodes_coords[node_i]
+        x2, y2 = nodes_coords[node_j]
+
+        length = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+
+        flux_contribution = 0.5 * (val * length)
+
+        f_vector[node_i] += flux_contribution
+        f_vector[node_j] += flux_contribution
+
+    return f_vector
+
+
+def apply_boundary_conditions(k_matrix: np.ndarray, f_vector: np.ndarray, global_node_ids: np.ndarray,
+                              nodes_coords: np.ndarray, bc_config: dict):
+    bounds = {
+        "left":     global_node_ids[:, 0],      # First column (x=0)
+        "right":    global_node_ids[:, -1],     # Last column (x=L)
+        "top":      global_node_ids[-1, :],     # Last row (y=H)
+        "bottom":   global_node_ids[0, :]       # First row (y=0)
+    }
+
+    for side_name, condition in bc_config.items():
+        node_list = bounds[side_name]
+        bc_type = condition['type']
+        val = condition['value']
+
+        if bc_type == 'dirichlet':
+            k_matrix, f_vector = apply_dirichlet(k_matrix, f_vector, node_list, val)
+
+        elif bc_type == 'neumann':
+            edges = []
+            for i in range(len(node_list) - 1):
+                n1 = node_list[i]
+                n2 = node_list[i + 1]
+                edges.append([n1, n2])
+
+            f_vector = apply_neumann(f_vector, nodes_coords, np.array(edges), val)
 
     return k_matrix, f_vector
 
