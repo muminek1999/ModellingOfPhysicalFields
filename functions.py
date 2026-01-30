@@ -1,7 +1,8 @@
 import numpy as np
 
 
-def generate_mesh(n_elements_x: int, n_elements_y: int, mat_ord: list[int], mat_bounds: list[float],
+def generate_mesh(n_elements_x: int, n_elements_y: int, mat_ord: np.ndarray,
+                  mat_bounds_x: list[float], mat_bounds_y: list[float],
                   shape: str = 'triangle', L: float = 1.0, H: float = 1.0):
     nx_nodes = n_elements_x + 1
     ny_nodes = n_elements_y + 1
@@ -10,11 +11,11 @@ def generate_mesh(n_elements_x: int, n_elements_y: int, mat_ord: list[int], mat_
     x = np.linspace(0, L, nx_nodes)
     y = np.linspace(0, H, ny_nodes)
 
-    if n_elements_x < len(mat_bounds) + 2:
+    if n_elements_x < len(mat_bounds_x) + 2:
         n_elements_x += 2
         print(f"WARNING: number of elements on x-axis is too small. Number of elements is now {n_elements_x}")
 
-    for bound in mat_bounds:
+    for bound in mat_bounds_x:
         idx = (np.abs(x - bound)).argmin()
         if 0 < idx < n_elements_x:
             x[idx] = bound
@@ -23,24 +24,53 @@ def generate_mesh(n_elements_x: int, n_elements_y: int, mat_ord: list[int], mat_
         else:
             x[idx - 1] = bound
 
+    if n_elements_y < len(mat_bounds_y) + 2:
+        n_elements_y += 2
+        print(f"WARNING: number of elements on y-axis is too small. Number of elements is now {n_elements_y}")
+
+    for bound in mat_bounds_y:
+        idx = (np.abs(y - bound)).argmin()
+        if 0 < idx < n_elements_y:
+            y[idx] = bound
+        elif idx == 0:
+            y[idx + 1] = bound
+        else:
+            y[idx - 1] = bound
+
     x = np.sort(x)
+    y = np.sort(y)
     xv, yv = np.meshgrid(x, y)
     nodes_coords = np.column_stack((xv.flatten(), yv.flatten()))
 
     elements = []
     global_node_ids = np.arange(n_nodes).reshape(ny_nodes, nx_nodes)
-    all_bounds = [0] + sorted(mat_bounds) + [L]
+
+    all_bounds_x = [0] + sorted(mat_bounds_x) + [L]
+    all_bounds_y = [0] + sorted(mat_bounds_y) + [H]
+
+    def get_material_id(xc: float, yc: float):
+        col_idx = 0
+        for k in range(len(all_bounds_x) - 1):
+            if all_bounds_x[k] <= xc <= all_bounds_x[k + 1]:
+                col_idx = k
+                break
+
+        row_idx_geo = 0     # Geometric indices are opposite to matrix
+        for k in range(len(all_bounds_y) - 1):
+            if all_bounds_y[k] <= yc <= all_bounds_y[k + 1]:
+                row_idx_geo = k
+                break
+
+        row_idx_matrix = (len(all_bounds_y) - 2) - row_idx_geo
+        return mat_ord[row_idx_matrix][col_idx]
 
     if shape == 'triangle':
         for j in range(n_elements_y):
             for i in range(n_elements_x):
                 x_center = (x[i] + x[i + 1]) * 0.5
-                mat_idx = 0
-                for k in range(len(all_bounds)):
-                    if all_bounds[k] <= x_center <= all_bounds[k + 1]:
-                        mat_idx = k
-                        break
-                mat_id = mat_ord[mat_idx]
+                y_center = (y[j] + y[j + 1]) * 0.5
+
+                mat_id = get_material_id(x_center, y_center)
 
                 n1 = global_node_ids[j, i]          # Bottom-Left
                 n2 = global_node_ids[j, i + 1]      # Bottom-Right
@@ -55,12 +85,9 @@ def generate_mesh(n_elements_x: int, n_elements_y: int, mat_ord: list[int], mat_
         for j in range(n_elements_y):
             for i in range(n_elements_x):
                 x_center = (x[i] + x[i + 1]) * 0.5
-                mat_idx = 0
-                for k in range(len(all_bounds)):
-                    if all_bounds[k] <= x_center <= all_bounds[k + 1]:
-                        mat_idx = k
-                        break
-                mat_id = mat_ord[mat_idx]
+                y_center = (y[j] + y[j + 1]) * 0.5
+
+                mat_id = get_material_id(x_center, y_center)
 
                 n1 = global_node_ids[j, i]          # Bottom-Left
                 n2 = global_node_ids[j, i + 1]      # Bottom-Right
@@ -72,7 +99,6 @@ def generate_mesh(n_elements_x: int, n_elements_y: int, mat_ord: list[int], mat_
 
     else:
         raise ValueError('shape must be either "triangle" or "rect" (generate_mesh function)')
-
 
 def element_stiffness(element: np.ndarray, nodes_coords: np.ndarray, k: float, shape: str = 'triangle'):
     if shape == 'triangle':
