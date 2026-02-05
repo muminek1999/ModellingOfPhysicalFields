@@ -3,8 +3,15 @@ import matplotlib.pyplot as plt
 from matplotlib import ticker
 import sys
 import os
+import ast
+from pathlib import Path
+from datetime import datetime
 import functions as fem
 import ast
+
+CONFIG_PATH = "config.txt"
+RES_DIR = Path("Results")
+RES_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def create_config_file(file_path: str):
@@ -130,6 +137,22 @@ def read_from_file(file_path: str):
 
     return parameters
 
+def save_output_file(node_coords: np.ndarray, temperature: np.ndarray, parameters: dict):
+    stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    out_path = RES_DIR / f"output_{stamp}.txt"
+
+    x = node_coords[:, 0].astype(float)
+    y = node_coords[:, 1].astype(float)
+    T = temperature.astype(float)
+
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(f"parameters:\n{parameters}\n\n")
+        f.write(f"x [m], y [m],  T [K] \n")
+        for i in range(T.size):
+            f.write(f"({x[i]:4.2f}, {y[i]:4.2f}) = {T[i]:.3f}\n")
+
+    return out_path
+
 def plot_1D(nodes_coords: np.ndarray, temperature: np.ndarray, target_y: float):
     y_nodes = nodes_coords[:, 1]
 
@@ -201,7 +224,7 @@ def plot_2D_triangle(elements: np.ndarray, nodes_coords: np.ndarray, temperature
 def main():
     np.set_printoptions(threshold=sys.maxsize, precision=2, suppress=True, linewidth=200)
     
-    parameters = read_from_file("config.txt")
+    parameters = read_from_file(CONFIG_PATH)
     print(f"\nRunning with parameters:\n{parameters}")
     
     # Mesh
@@ -230,6 +253,8 @@ def main():
 
     # Solution
     temperature = np.linalg.solve(K_global, F_global)
+
+    save_output_file(nodes_coords, temperature, parameters)
 
     if parameters["shape"] == "rect":
         plot_2D_rect(parameters["n_elements_x"], parameters["n_elements_y"], nodes_coords, temperature)
