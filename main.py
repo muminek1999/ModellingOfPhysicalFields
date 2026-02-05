@@ -3,14 +3,13 @@ import matplotlib.pyplot as plt
 from matplotlib import ticker
 import sys
 import os
-import ast
 from pathlib import Path
 from datetime import datetime
 import functions as fem
 import ast
 
 CONFIG_PATH = "config.txt"
-RES_DIR = Path("Results")
+RES_DIR = Path("results")
 RES_DIR.mkdir(parents=True, exist_ok=True)
 
 
