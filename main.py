@@ -19,7 +19,7 @@ def create_config_file(file_path: str):
 # H - total height (in meters)
 # n_elements_x - number of elements along x-axis
 # n_elements_y - number of elements along y-axis
-# shape - shape of elements
+# shape - shape of elements (triangle/rect)
 # mat_bounds_x - x of materials interface location (in meters)
 # mat_bounds_y - y of materials interface location (in meters)
 # mat_ord - visual representation of materials' positions (ARRAY)
