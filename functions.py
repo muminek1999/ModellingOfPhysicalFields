@@ -303,9 +303,9 @@ def apply_point_sources(f_vector: np.ndarray, nodes_coords: np.ndarray,
 
                 area_tot = 0.5 * np.abs(x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2))
 
-                area1 = 0.5 * np.abs(px*(y2 - y3) + x2*(y3 - py) + x3*(py - y2))
-                area2 = 0.5 * np.abs(x1*(py - y3) + px*(y3 - y1) + x3*(y1 - py))
-                area3 = 0.5 * np.abs(x1*(y2 - py) + x2*(py - y1) + px*(y1 - y2))
+                area1 = 0.5 * np.abs(px * (y2 - y3) + x2 * (y3 - py) + x3 * (py - y2))
+                area2 = 0.5 * np.abs(x1 * (py - y3) + px * (y3 - y1) + x3 * (y1 - py))
+                area3 = 0.5 * np.abs(x1 * (y2 - py) + x2 * (py - y1) + px * (y1 - y2))
 
                 if np.isclose(area_tot, area1 + area2 + area3, rtol=1e-5) and area_tot > 0:
                     N = np.array([area1, area2, area3]) / area_tot
