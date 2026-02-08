@@ -156,6 +156,7 @@ def element_stiffness(element: np.ndarray, nodes_coords: np.ndarray, k: float, s
 def global_assembly(nodes_coords: np.ndarray,
                     elements: np.ndarray,
                     materials: dict,
+                    Q: float = 0.0,
                     shape: str = 'triangle'):
     n_nodes = len(nodes_coords)
     k_matrix = np.zeros((n_nodes, n_nodes))
@@ -168,6 +169,29 @@ def global_assembly(nodes_coords: np.ndarray,
         global_indices = element[:-1]
 
         k_matrix_local = element_stiffness(element, nodes_coords, k_val, shape)
+
+        if Q != 0.0:
+            x_vec, y_vec = get_global_coords(nodes_coords, element, shape)
+
+            if shape == 'triangle':
+                x1, x2, x3 = x_vec
+                y1, y2, y3 = y_vec
+                area = 0.5 * np.abs(x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2))
+
+                f_local = (Q * area / 3.0) * np.ones(3)
+
+            elif shape == 'rect':
+                Lx = np.max(x_vec) - np.min(x_vec)
+                Ly = np.max(y_vec) - np.min(y_vec)
+                area = Lx * Ly
+
+                f_local = (Q * area / 4.0) * np.ones(4)
+
+            else:
+                raise ValueError(f"Unknown shape: {shape}, during global assembly")
+
+            for i, node_id in enumerate(global_indices):
+                f_vector[int(node_id)] += f_local[i]
 
         for i in range(len(global_indices)):
             I = int(global_indices[i])          # Global row index
@@ -234,6 +258,68 @@ def apply_boundary_conditions(k_matrix: np.ndarray, f_vector: np.ndarray, global
             f_vector = apply_neumann(f_vector, nodes_coords, np.array(edges), val)
 
     return k_matrix, f_vector
+
+def apply_point_sources(f_vector: np.ndarray, nodes_coords: np.ndarray,
+                        elements: np.ndarray, sources: list[dict], shape: str):
+    for source in sources:
+        px, py = source['x'], source['y']
+        val = source['value']
+        point_found = False
+
+        for element in elements:
+            node_ids = element[:-1].astype(int)
+            x_vec, y_vec = get_global_coords(nodes_coords, element, shape)
+
+            if shape == 'rect':
+                x_min, x_max = np.min(x_vec), np.max(x_vec)
+                y_min, y_max = np.min(y_vec), np.max(y_vec)
+
+                if x_min <= px <= x_max and y_min <= py <= y_max:
+                    Lx = x_max - x_min
+                    Ly = y_max - y_min
+
+                    if Lx == 0 or Ly == 0:
+                        continue
+
+                    u = (px - x_min) / Lx
+                    v = (py - y_min) / Ly
+
+                    N = np.array([
+                        (1 - u) * (1 - v),  # Bottom-Left
+                        u * (1 - v),        # Bottom-Right
+                        u * v,              # Top-Right
+                        (1 - u) * v         # Top-Left
+                    ])
+
+                    for i, node_id in enumerate(node_ids):
+                        f_vector[node_id] += val * N[i]
+
+                    point_found = True
+                    break
+
+            if shape == 'triangle':
+                x1, x2, x3 = x_vec
+                y1, y2, y3 = y_vec
+
+                area_tot = 0.5 * np.abs(x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2))
+
+                area1 = 0.5 * np.abs(px*(y2 - y3) + x2*(y3 - py) + x3*(py - y2))
+                area2 = 0.5 * np.abs(x1*(py - y3) + px*(y3 - y1) + x3*(y1 - py))
+                area3 = 0.5 * np.abs(x1*(y2 - py) + x2*(py - y1) + px*(y1 - y2))
+
+                if np.isclose(area_tot, area1 + area2 + area3, rtol=1e-5) and area_tot > 0:
+                    N = np.array([area1, area2, area3]) / area_tot
+
+                    for i, node_id in enumerate(node_ids):
+                        f_vector[node_id] += val * N[i]
+
+                    point_found = True
+                    break
+
+        if not point_found:
+            print(f"WARNING: point source at ({px}, {py}) is outside the mesh or could not be properly placed")
+
+    return f_vector
 
 
 def get_global_coords(nodes_coords: np.ndarray, element: np.ndarray, shape: str = 'triangle'):

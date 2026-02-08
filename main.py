@@ -28,6 +28,8 @@ def create_config_file(file_path: str):
 # right - boundary condition on right side of area (format: right = [type] [value])
 # top - boundary condition on top of area (format: [top] = type [value])
 # bottom - boundary condition on bottom of area (format: bottom = [type] [value])
+# point_source - point heat source (format: point_source = [x] [y] [value])
+# Q - volumetric source (format: Q = [value])
 # y_plot - y coordinate of nodes that are considered during plotting 1-D plot (in meters)
 
 L = 1.0
@@ -45,6 +47,9 @@ left = dirichlet 100.0
 right = dirichlet 300.0
 top = neumann 0.0
 bottom = neumann 0.0
+
+point_source = None
+Q = None
 
 y_plot = None
 """
@@ -64,7 +69,9 @@ def read_from_file(file_path: str):
         "mat_bounds_x": [], "mat_bounds_y": [],
         "mat_ord": [], "materials": {},
         "y_plot": None,
-        "bc_config": {}
+        "bc_config": {},
+        "point_sources": [],
+        "Q": None
     }
 
     if not os.path.exists(file_path):
@@ -97,18 +104,18 @@ def read_from_file(file_path: str):
                 parameters[key] = int(value)
             
             elif key == "shape":
-                parameters["shape"] = value
+                parameters[key] = value
             
             elif key == "mat_bounds_x":
                 values = value.replace(",", " ").split()
-                parameters["mat_bounds_x"] = [float(x) for x in values]
+                parameters[key] = [float(x) for x in values]
 
             elif key == "mat_bounds_y":
                 values = value.replace(",", " ").split()
-                parameters["mat_bounds_y"] = [float(x) for x in values]
+                parameters[key] = [float(x) for x in values]
             
             elif key == "mat_ord":
-                parameters["mat_ord"] = np.array(ast.literal_eval(value), dtype=int)
+                parameters[key] = np.array(ast.literal_eval(value), dtype=int)
             
             elif key == "materials":
                 materials = {}
@@ -119,7 +126,7 @@ def read_from_file(file_path: str):
                         m_id = int(parts[0].strip())
                         m_val = float(parts[1].strip())
                         materials[m_id] = m_val
-                parameters["materials"] = materials
+                parameters[key] = materials
             
             elif key in ["right", "left", "top", "bottom"]:
                 condition_type, val = value.split()
@@ -127,6 +134,21 @@ def read_from_file(file_path: str):
                     "type": condition_type,
                     "value": float(val)
                 }
+
+            elif key == "point_source":
+                parts = value.split()
+                if len(parts) == 3:
+                    parameters["point_sources"].append({
+                        "x": float(parts[0]),
+                        "y": float(parts[1]),
+                        "value": float(parts[2])
+                    })
+
+            elif key == "Q":
+                if value == "None":
+                    parameters[key] = None
+                else:
+                    parameters[key] = float(value)
 
     if parameters["y_plot"] is not None:
         if not (0 <= parameters["y_plot"] <= parameters["H"]):
@@ -238,7 +260,13 @@ def main():
     n_nodes = len(nodes_coords)
 
     # Global assembly
-    K_global, F_global = fem.global_assembly(nodes_coords, elements, parameters["materials"], shape=parameters["shape"])
+    q_val = parameters["Q"] if parameters["Q"] is not None else 0.0
+    K_global, F_global = fem.global_assembly(nodes_coords, elements, parameters["materials"],
+                                             Q=q_val, shape=parameters["shape"])
+
+    if parameters["point_sources"]:
+        F_global = fem.apply_point_sources(F_global, nodes_coords, elements,
+                                           parameters["point_sources"], shape=parameters["shape"])
 
     # PRINTING BEFORE BC
     if nx_nodes < 10 and ny_nodes < 10:
